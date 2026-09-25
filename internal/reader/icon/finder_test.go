@@ -7,12 +7,18 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
 	"hash/crc32"
 	"image"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
+	"miniflux.app/v2/internal/config"
 	"miniflux.app/v2/internal/model"
+	"miniflux.app/v2/internal/reader/fetcher"
 )
 
 func TestParseImageDataURL(t *testing.T) {
@@ -516,5 +522,84 @@ func writePNGChunk(t *testing.T, b *bytes.Buffer, chunkType string, fill func([]
 
 	if err := binary.Write(b, binary.BigEndian, crc.Sum32()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestIsImageContent(t *testing.T) {
+	png, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAACEAAAAhCAYAAABX5MJvAAAALUlEQVR42u3OMQEAAAgDoJnc6BpjDyRgcrcpGwkJCQkJCQkJCQkJCQkJCYmyB7NfUj/Kk4FkAAAAAElFTkSuQmCC")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ico := []byte{0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x10}
+	html := []byte("<!DOCTYPE html><html><head><title>Company News</title></head><body></body></html>")
+	svg := []byte(`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>`)
+	avif := []byte{0x00, 0x00, 0x00, 0x1c, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66, 0x00, 0x00, 0x00, 0x00}
+
+	testCases := []struct {
+		name        string
+		body        []byte
+		contentType string
+		expected    bool
+	}{
+		{"png", png, "image/png", true},
+		{"png with wrong content type", png, "text/html", true},
+		{"ico", ico, "image/x-icon", true},
+		{"html declared as icon", html, "image/x-icon", false},
+		{"html page", html, "text/html; charset=utf-8", false},
+		{"svg", svg, "image/svg+xml", true},
+		{"svg with parameters", svg, "image/svg+xml; charset=utf-8", true},
+		{"html declared as svg", html, "image/svg+xml", false},
+		{"svg without content type", svg, "", false},
+		{"unknown binary image format", avif, "image/avif", true},
+		{"unknown binary declared as non-image", avif, "application/octet-stream", false},
+		{"empty body", []byte{}, "image/png", false},
+	}
+
+	for _, tc := range testCases {
+		if got := isImageContent(tc.body, tc.contentType); got != tc.expected {
+			t.Errorf("%s: isImageContent() = %v, want %v", tc.name, got, tc.expected)
+		}
+	}
+}
+
+func TestFindIconSkipsFeedIconURLThatIsNotAnImage(t *testing.T) {
+	os.Clearenv()
+	t.Setenv("FETCHER_ALLOW_PRIVATE_NETWORKS", "1")
+	var err error
+	config.Opts, err = config.NewConfigParser().ParseEnvironmentVariables()
+	if err != nil {
+		t.Fatalf("Parsing failure: %v", err)
+	}
+
+	png, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAACEAAAAhCAYAAABX5MJvAAAALUlEQVR42u3OMQEAAAgDoJnc6BpjDyRgcrcpGwkJCQkJCQkJCQkJCQkJCYmyB7NfUj/Kk4FkAAAAAElFTkSuQmCC")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The feed's <image> URL points at the section page itself, which is HTML.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/section":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			fmt.Fprint(w, `<!DOCTYPE html><html><head><link rel="icon" href="/favicon.png"></head><body></body></html>`)
+		case "/favicon.png":
+			w.Header().Set("Content-Type", "image/png")
+			w.Write(png)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	finder := newIconFinder(fetcher.NewRequestBuilder(), server.URL+"/section", server.URL+"/section")
+	icon, err := finder.findIcon()
+	if err != nil {
+		t.Fatalf("findIcon() error: %v", err)
+	}
+	if icon == nil {
+		t.Fatal("findIcon() returned no icon")
+	}
+	if icon.MimeType != "image/png" {
+		t.Errorf("icon MIME type = %q, want image/png (the HTML page was stored as the icon)", icon.MimeType)
 	}
 }

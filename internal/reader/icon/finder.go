@@ -13,6 +13,8 @@ import (
 	"image/png"
 	"io"
 	"log/slog"
+	"mime"
+	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
@@ -172,6 +174,10 @@ func (f *iconFinder) downloadIcon(iconURL string) (*model.Icon, error) {
 		return nil, fmt.Errorf("icon: unable to read response body: %w", localizedError.Error())
 	}
 
+	if !isImageContent(responseBody, responseHandler.ContentType()) {
+		return nil, fmt.Errorf("icon: %q is not an image (Content-Type %q)", iconURL, responseHandler.ContentType())
+	}
+
 	icon := &model.Icon{
 		Hash:     crypto.HashFromBytes(responseBody),
 		MimeType: responseHandler.ContentType(),
@@ -181,6 +187,27 @@ func (f *iconFinder) downloadIcon(iconURL string) (*model.Icon, error) {
 	icon = resizeIcon(icon)
 
 	return icon, nil
+}
+
+// isImageContent reports whether a downloaded icon is actually an image.
+// Some servers answer an icon URL with an HTML page, for example when a feed's
+// <image> URL points at a web page, and that page must not be stored as the
+// feed icon. The body is sniffed rather than trusting the Content-Type header.
+func isImageContent(body []byte, contentType string) bool {
+	sniffed := http.DetectContentType(body)
+	if strings.HasPrefix(sniffed, "image/") {
+		return true
+	}
+
+	declared, _, _ := mime.ParseMediaType(contentType)
+
+	// http.DetectContentType does not recognize SVG (it reports XML or text).
+	if declared == "image/svg+xml" {
+		return bytes.Contains(body, []byte("<svg"))
+	}
+
+	// Binary image formats the sniffer doesn't know, such as AVIF.
+	return strings.HasPrefix(declared, "image/") && sniffed == "application/octet-stream"
 }
 
 func resizeIcon(icon *model.Icon) *model.Icon {
