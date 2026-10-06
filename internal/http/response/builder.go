@@ -163,7 +163,8 @@ var acceptEncoding = AcceptEncoding("br", "gzip", "deflate")
 
 func (b *Builder) compress(data []byte) {
 	if b.enableCompression && len(data) > compressionThreshold {
-		b.headers.Set("Vary", "Accept-Encoding")
+		// Add, not Set: keep a Vary the handler set (e.g. Cookie on share pages).
+		b.headers.Add("Vary", "Accept-Encoding")
 
 		encoding := acceptEncoding.Parse(b.r.Header.Get("Accept-Encoding"))
 		switch encoding {

@@ -31,9 +31,13 @@
         <script type="module" nonce="{{ $cspNonce }}">{{ .user.CustomJS | safeJS }}</script>
         {{ end -}}
     {{ else if .shareOwner -}}
-        {{/* Public share page: the sharing user's custom CSS, not their JavaScript. */}}
+        {{/* Public share page: the sharing user's custom CSS, and their custom
+             JavaScript when the handler allows it (shareOwnerJS). */}}
         {{ if .shareOwner.Stylesheet -}}
         <style nonce="{{ $cspNonce }}">{{ .shareOwner.Stylesheet | safeCSS }}</style>
+        {{ end -}}
+        {{ if .shareOwnerJS -}}
+        <script type="module" nonce="{{ $cspNonce }}">{{ .shareOwnerJS | safeJS }}</script>
         {{ end -}}
     {{ end -}}
 </head>
