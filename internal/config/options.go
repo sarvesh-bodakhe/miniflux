@@ -569,6 +569,11 @@ func NewConfigOptions() *configOptions {
 					return validateGreaterOrEqualThan(rawValue, 1)
 				},
 			},
+			"SHARE_EXPIRY_DAYS": {
+				parsedDuration: -1,
+				rawValue:       "-1",
+				valueType:      dayType,
+			},
 			"TRUSTED_REVERSE_PROXY_NETWORKS": {
 				parsedStringList: []string{},
 				rawValue:         "",
@@ -986,6 +991,12 @@ func (c *configOptions) SchedulerRoundRobinMaxInterval() time.Duration {
 
 func (c *configOptions) SchedulerRoundRobinMinInterval() time.Duration {
 	return c.options["SCHEDULER_ROUND_ROBIN_MIN_INTERVAL"].parsedDuration
+}
+
+// ShareExpiryInterval returns how long a shared entry link stays public.
+// A negative value means shared links never expire.
+func (c *configOptions) ShareExpiryInterval() time.Duration {
+	return c.options["SHARE_EXPIRY_DAYS"].parsedDuration
 }
 
 func (c *configOptions) TrustedReverseProxyNetworks() []string {

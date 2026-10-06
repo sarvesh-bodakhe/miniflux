@@ -48,6 +48,14 @@ func runCleanupTasks(store *storage.Storage) {
 		}
 	}
 
+	if rowsAffected, err := store.ExpireSharedEntries(config.Opts.ShareExpiryInterval()); err != nil {
+		slog.Error("Unable to expire shared entries", slog.Any("error", err))
+	} else {
+		slog.Info("Shared entries expiry completed",
+			slog.Int64("shared_entries_expired", rowsAffected),
+		)
+	}
+
 	if nbIcons, err := store.CleanupOrphanIcons(); err != nil {
 		slog.Error("Unable to clean orphan icons", slog.Any("error", err))
 	} else {

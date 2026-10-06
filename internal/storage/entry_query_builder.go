@@ -181,6 +181,13 @@ func (e *EntryQueryBuilder) WithShareCode(shareCode string) *EntryQueryBuilder {
 	return e
 }
 
+// SharedAfter adds a condition > shared_at. Entries without a share date never match.
+func (e *EntryQueryBuilder) SharedAfter(date time.Time) *EntryQueryBuilder {
+	e.conditions = append(e.conditions, "e.shared_at > $"+strconv.Itoa(len(e.args)+1))
+	e.args = append(e.args, date)
+	return e
+}
+
 // WithShareCodeNotEmpty adds a filter for non-empty share code.
 func (e *EntryQueryBuilder) WithShareCodeNotEmpty() *EntryQueryBuilder {
 	e.conditions = append(e.conditions, "e.share_code <> ''")

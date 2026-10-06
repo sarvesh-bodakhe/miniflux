@@ -1217,6 +1217,30 @@ func TestCleanupArchiveReadIntervalOptionParsing(t *testing.T) {
 	}
 }
 
+func TestShareExpiryIntervalOptionParsing(t *testing.T) {
+	configParser := NewConfigParser()
+
+	if configParser.options.ShareExpiryInterval() >= 0 {
+		t.Fatalf("Expected SHARE_EXPIRY_DAYS to disable expiry by default")
+	}
+
+	if err := configParser.parseLines([]string{"SHARE_EXPIRY_DAYS=30"}); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if configParser.options.ShareExpiryInterval().Hours() != 24*30 {
+		t.Fatalf("Expected SHARE_EXPIRY_DAYS to be 30 days")
+	}
+
+	if err := configParser.parseLines([]string{"SHARE_EXPIRY_DAYS=-1"}); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if configParser.options.ShareExpiryInterval() >= 0 {
+		t.Fatalf("Expected SHARE_EXPIRY_DAYS=-1 to disable expiry")
+	}
+}
+
 func TestCleanupArchiveUnreadIntervalOptionParsing(t *testing.T) {
 	configParser := NewConfigParser()
 

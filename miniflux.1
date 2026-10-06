@@ -624,6 +624,17 @@ Minimum interval in minutes for the round robin scheduler\&.
 .br
 Default is 60 minutes\&.
 .TP
+.B SHARE_EXPIRY_DAYS
+Number of days a shared entry link stays public, counted from the moment the
+entry was shared\&.
+.br
+Once expired, the link returns a 404 error and the cleanup job removes the share
+code, so the entry can be archived like any other\&.
+.br
+Set to -1 to keep shared links public until they are removed manually\&.
+.br
+Default is -1 (never expire)\&.
+.TP
 .B TRUSTED_REVERSE_PROXY_NETWORKS
 A comma-separated list of networks (CIDR notation) allowed to use the proxy
 authentication header, \fBX-Forwarded-For\fR,

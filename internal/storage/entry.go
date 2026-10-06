@@ -654,7 +654,7 @@ func (s *Storage) EntryShareCode(userID int64, entryID int64) (shareCode string,
 	if shareCode == "" {
 		shareCode = crypto.GenerateRandomStringHex(20)
 
-		query = `UPDATE entries SET share_code = $1 WHERE user_id=$2 AND id=$3`
+		query = `UPDATE entries SET share_code = $1, shared_at = now() WHERE user_id=$2 AND id=$3`
 		_, err = s.db.Exec(query, shareCode, userID, entryID)
 		if err != nil {
 			err = fmt.Errorf(`store: unable to set share code for entry #%d: %v`, entryID, err)
@@ -667,12 +667,40 @@ func (s *Storage) EntryShareCode(userID int64, entryID int64) (shareCode string,
 
 // UnshareEntry removes the share code for the given entry.
 func (s *Storage) UnshareEntry(userID int64, entryID int64) (err error) {
-	query := `UPDATE entries SET share_code='' WHERE user_id=$1 AND id=$2`
+	query := `UPDATE entries SET share_code='', shared_at=NULL WHERE user_id=$1 AND id=$2`
 	_, err = s.db.Exec(query, userID, entryID)
 	if err != nil {
 		err = fmt.Errorf(`store: unable to remove share code for entry #%d: %v`, entryID, err)
 	}
 	return
+}
+
+// ExpireSharedEntries removes the share code of entries shared longer ago than
+// the given interval. A negative interval disables expiry.
+func (s *Storage) ExpireSharedEntries(interval time.Duration) (int64, error) {
+	if interval < 0 {
+		return 0, nil
+	}
+
+	query := `
+		UPDATE entries
+		SET share_code='', shared_at=NULL
+		WHERE share_code <> '' AND (shared_at IS NULL OR shared_at < now() - $1::interval)
+	`
+
+	days := max(int(interval/(24*time.Hour)), 1)
+
+	result, err := s.db.Exec(query, fmt.Sprintf("%d days", days))
+	if err != nil {
+		return 0, fmt.Errorf(`store: unable to expire shared entries: %v`, err)
+	}
+
+	count, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf(`store: unable to get the number of rows affected: %v`, err)
+	}
+
+	return count, nil
 }
 
 func truncateTitleAndContentForTSVectorField(title, content string) (string, string) {

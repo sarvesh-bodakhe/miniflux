@@ -1557,4 +1557,15 @@ var migrations = [...]func(tx *sql.Tx) error{
 		`)
 		return err
 	},
+	func(tx *sql.Tx) (err error) {
+		// Broadsheet fork: when an entry was shared, so that share links can
+		// expire (SHARE_EXPIRY_DAYS). Links shared before this migration get a
+		// full period from now. IF NOT EXISTS keeps it safe to re-run after a
+		// rebase onto an upstream that has added migrations of its own.
+		_, err = tx.Exec(`
+			ALTER TABLE entries ADD COLUMN IF NOT EXISTS shared_at timestamp with time zone;
+			UPDATE entries SET shared_at=now() WHERE share_code <> '' AND shared_at IS NULL;
+		`)
+		return err
+	},
 }

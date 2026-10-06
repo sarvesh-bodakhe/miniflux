@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"miniflux.app/v2/internal/config"
 	"miniflux.app/v2/internal/http/request"
 	"miniflux.app/v2/internal/http/response"
 
@@ -41,17 +42,23 @@ func (h *handler) sharedEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	etag := shareCode
-	response.NewBuilder(w, r).WithCaching(etag, 72*time.Hour, func(b *response.Builder) {
-		entry, err := h.store.NewAnonymousQueryBuilder().
-			WithShareCode(shareCode).
-			GetEntry()
+	// Look the entry up before answering conditional requests, so an expired
+	// link cannot keep revalidating as "not modified".
+	query := h.store.NewAnonymousQueryBuilder().WithShareCode(shareCode)
+	cacheDuration := 72 * time.Hour
+	if expiry := config.Opts.ShareExpiryInterval(); expiry >= 0 {
+		query = query.SharedAfter(time.Now().Add(-expiry))
+		// Let browsers revalidate soon, so they notice the expiry.
+		cacheDuration = time.Hour
+	}
 
-		if err != nil || entry == nil {
-			response.HTMLNotFound(w, r)
-			return
-		}
+	entry, err := query.GetEntry()
+	if err != nil || entry == nil {
+		response.HTMLNotFound(w, r)
+		return
+	}
 
+	response.NewBuilder(w, r).WithCaching(shareCode, cacheDuration, func(b *response.Builder) {
 		view := view.New(h.tpl, r)
 		view.Set("entry", entry)
 
