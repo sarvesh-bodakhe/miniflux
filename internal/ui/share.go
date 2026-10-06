@@ -89,6 +89,14 @@ func (h *handler) sharedEntry(w http.ResponseWriter, r *http.Request) {
 		}
 		view.Set("shareOwner", owner)
 		view.Set("shareOwnerJS", ownerJS)
+		// When this link expires, in the sharer's timezone.
+		if expiry := config.Opts.ShareExpiryInterval(); expiry >= 0 {
+			if dates, err := h.store.ShareExpiryDates(owner.ID, []int64{entry.ID}, expiry); err == nil {
+				if at, ok := dates[entry.ID]; ok {
+					view.Set("shareExpiry", &shareExpiryDate{At: at})
+				}
+			}
+		}
 
 		b.WithHeader("Content-Type", "text/html; charset=utf-8")
 		b.WithBodyAsBytes(view.Render("entry"))

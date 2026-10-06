@@ -223,6 +223,11 @@
             </span>
             {{ end }}
         </div>
+        {{ with .shareExpiry }}
+        <div class="entry-date entry-share-expiry">
+            <time datetime="{{ isodate .At }}" title="{{ isodate .At }}">Link expires {{ .At.Format "2 Jan 2006, 15:04 MST" }}</time>
+        </div>
+        {{ end }}
     </header>
 </section>
 {{ end }}
