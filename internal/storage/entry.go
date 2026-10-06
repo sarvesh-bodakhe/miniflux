@@ -12,6 +12,7 @@ import (
 
 	"miniflux.app/v2/internal/crypto"
 	"miniflux.app/v2/internal/model"
+	"miniflux.app/v2/internal/timezone"
 
 	"github.com/lib/pq"
 )
@@ -663,6 +664,39 @@ func (s *Storage) EntryShareCode(userID int64, entryID int64) (shareCode string,
 	}
 
 	return
+}
+
+// ShareExpiryDates returns when the share link of each given entry expires,
+// in the user's timezone. Entries without a share date are left out.
+func (s *Storage) ShareExpiryDates(userID int64, entryIDs []int64, interval time.Duration) (map[int64]time.Time, error) {
+	query := `
+		SELECT
+			e.id,
+			(e.shared_at + $3::interval) at time zone u.timezone,
+			u.timezone
+		FROM entries e
+		INNER JOIN users u ON u.id=e.user_id
+		WHERE e.user_id=$1 AND e.id=ANY($2) AND e.share_code <> '' AND e.shared_at IS NOT NULL
+	`
+
+	rows, err := s.db.Query(query, userID, pq.Array(entryIDs), fmt.Sprintf("%d seconds", int64(interval.Seconds())))
+	if err != nil {
+		return nil, fmt.Errorf(`store: unable to fetch share expiry dates: %v`, err)
+	}
+	defer rows.Close()
+
+	dates := make(map[int64]time.Time, len(entryIDs))
+	for rows.Next() {
+		var entryID int64
+		var expiresAt time.Time
+		var tz string
+		if err := rows.Scan(&entryID, &expiresAt, &tz); err != nil {
+			return nil, fmt.Errorf(`store: unable to fetch share expiry date row: %v`, err)
+		}
+		dates[entryID] = timezone.Convert(tz, expiresAt)
+	}
+
+	return dates, rows.Err()
 }
 
 // UnshareEntry removes the share code for the given entry.

@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"miniflux.app/v2/internal/config"
+	"miniflux.app/v2/internal/crypto"
 	"miniflux.app/v2/internal/http/request"
 	"miniflux.app/v2/internal/http/response"
 
+	"miniflux.app/v2/internal/ui/static"
 	"miniflux.app/v2/internal/ui/view"
 )
 
@@ -58,9 +60,23 @@ func (h *handler) sharedEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.NewBuilder(w, r).WithCaching(shareCode, cacheDuration, func(b *response.Builder) {
+	// Show the page in the sharing user's theme and custom CSS. They are part
+	// of the ETag, so cached copies are replaced when the styling changes.
+	owner, err := h.store.UserByID(entry.UserID)
+	if err != nil || owner == nil {
+		response.HTMLNotFound(w, r)
+		return
+	}
+	etag := shareCode + "-" + crypto.HashFromBytes([]byte(owner.Theme + "\x00" + owner.Stylesheet + "\x00" + owner.ExternalFontHosts))[:16]
+
+	response.NewBuilder(w, r).WithCaching(etag, cacheDuration, func(b *response.Builder) {
 		view := view.New(h.tpl, r)
 		view.Set("entry", entry)
+		if _, ok := static.StylesheetBundles[owner.Theme+".css"]; ok {
+			view.Set("theme", owner.Theme)
+			view.Set("theme_checksum", static.StylesheetBundles[owner.Theme+".css"].Checksum)
+		}
+		view.Set("shareOwner", owner)
 
 		b.WithHeader("Content-Type", "text/html; charset=utf-8")
 		b.WithBodyAsBytes(view.Render("entry"))

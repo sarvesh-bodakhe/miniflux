@@ -20,7 +20,7 @@
     <link rel="icon" href="{{ iconPath "icon.svg" }}">
 
     {{ $cspNonce := nonce }}
-    {{ csp .user $cspNonce | safeHTML }}
+    {{ csp (or .user .shareOwner) $cspNonce | safeHTML }}
     <link rel="stylesheet" nonce="{{ $cspNonce }}" type="text/css" href="{{ routePath "/stylesheets/%s/%s.css" .theme_checksum .theme }}">
     <script nonce="{{ $cspNonce }}" src="{{ routePath "/js/%s/%s.js" .app_js_checksum "app" }}" type="module"></script>
     {{ if .user -}}
@@ -29,6 +29,11 @@
         {{ end -}}
         {{ if .user.CustomJS -}}
         <script type="module" nonce="{{ $cspNonce }}">{{ .user.CustomJS | safeJS }}</script>
+        {{ end -}}
+    {{ else if .shareOwner -}}
+        {{/* Public share page: the sharing user's custom CSS, not their JavaScript. */}}
+        {{ if .shareOwner.Stylesheet -}}
+        <style nonce="{{ $cspNonce }}">{{ .shareOwner.Stylesheet | safeCSS }}</style>
         {{ end -}}
     {{ end -}}
 </head>

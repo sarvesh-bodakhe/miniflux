@@ -68,6 +68,11 @@
                     <li class="item-meta-info-timestamp">
                         <time datetime="{{ isodate .Date }}" title="{{ isodate .Date }}">{{ elapsed $.user.Timezone .Date }}</time>
                     </li>
+                    {{ with index $.shareExpiry .ID }}
+                    <li class="item-meta-info-share-expiry">
+                        <time datetime="{{ isodate .At }}" title="{{ isodate .At }}">{{ if .Expired }}Link expired{{ else }}Link expires {{ .At.Format "2 Jan 2006, 15:04" }}{{ end }}</time>
+                    </li>
+                    {{ end }}
                 </ul>
                 <ul class="item-meta-icons">
                     <li class="item-meta-icons-delete">
